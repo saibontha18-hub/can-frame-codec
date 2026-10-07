@@ -1,0 +1,4 @@
+*.o
+demo
+smoke_test
+full_test

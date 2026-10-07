@@ -1,9 +1,11 @@
 /*
  * demo: exercise the frame codec — encode a few frames, decode one back,
- * and run a small arbitration race so you can see who wins the bus.
+ * run a small arbitration race, and solve bit timing for a few
+ * textbook clock/bitrate pairs.
  */
 #include <stdio.h>
 
+#include "bit_timing.h"
 #include "can_frame.h"
 
 static void dump_bytes(const char *label, const uint8_t *b, int n)
@@ -79,6 +81,36 @@ int main(void)
         remote.rtr = true;
 
         race("0x123 data vs 0x123 remote", &data, &remote);
+    }
+
+    putchar('\n');
+    printf("bit timing (clock -> target):\n");
+
+    {
+        /* A few pairs every CAN bring-up hits at some point. */
+        static const struct { uint32_t clock, rate; } pairs[] = {
+            { 48000000u, 500000u },
+            { 16000000u, 125000u },
+            { 8000000u, 1000000u },
+        };
+        size_t i;
+
+        printf("%-16s %-10s %4s %6s %6s %4s %9s %8s\n",
+               "clock/rate", "achieved", "brp", "tseg1", "tseg2", "sjw",
+               "sample%", "err ppm");
+        for (i = 0; i < sizeof(pairs) / sizeof(pairs[0]); i++) {
+            can_bt_solution_t s;
+
+            if (can_bit_timing_solve(pairs[i].clock, pairs[i].rate, &s) != 0) {
+                printf("%u/%u: no solution\n", pairs[i].clock, pairs[i].rate);
+                continue;
+            }
+            printf("%4uMHz/%6ukbps %7uHz %4u %6u %6u %4u %7u.%u %8u\n",
+                   pairs[i].clock / 1000000u, pairs[i].rate / 1000u,
+                   s.actual_bps, s.brp, s.tseg1, s.tseg2, s.sjw,
+                   s.sample_permille / 10, s.sample_permille % 10,
+                   s.error_ppm);
+        }
     }
 
     return 0;
